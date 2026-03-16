@@ -18,22 +18,27 @@ def create_product(request):
 
     data = request.data
 
-    category_name = data.get('category')
-    category, created = Category.objects.get_or_create(name=category_name)
-
     product = Product.objects.create(
         seller=request.user,
-        category=category,
         name=data['name'],
         description=data.get('description', ''),
         price=data['price'],
         stock=data.get('stock', 0)
     )
 
+    # Accept a list ["Electronics", "Sale"] or a single string "Electronics"
+    category_names = data.get('categories', [])
+    if isinstance(category_names, str):
+        category_names = [category_names]
+
+    for name in category_names:
+        category, _ = Category.objects.get_or_create(name=name)
+        product.categories.add(category)
+
     return JsonResponse({
         'message': 'Product created',
         'product_id': product.id,
-        'category_created': created
+        'categories': [c.name for c in product.categories.all()]
     })
 
 
@@ -47,11 +52,10 @@ def get_products(request):
     search = request.GET.get('search', '')
 
     if search:
-        products = Product.objects.filter(
-            name__icontains=search
-        ) | Product.objects.filter(
-            category__name__icontains=search
-        )
+        products = (
+            Product.objects.filter(name__icontains=search) |
+            Product.objects.filter(categories__name__icontains=search)
+        ).distinct()
     else:
         products = Product.objects.all()
 
@@ -65,7 +69,7 @@ def get_products(request):
             "price": str(product.price),
             "stock": product.stock,
             "seller": product.seller.id,
-            "category": product.category.name
+            "categories": [c.name for c in product.categories.all()]
         })
 
     return JsonResponse(data, safe=False)
@@ -87,7 +91,7 @@ def get_product(request, pk):
         "price": str(product.price),
         "stock": product.stock,
         "seller": product.seller.id,
-        "category": product.category.name
+        "categories": [c.name for c in product.categories.all()]
     })
 
 
@@ -105,19 +109,26 @@ def update_product(request, pk):
 
     data = request.data
 
-    if 'category' in data:
-        category, created = Category.objects.get_or_create(name=data['category'])
-        product.category = category
-
     product.name = data.get('name', product.name)
     product.description = data.get('description', product.description)
     product.price = data.get('price', product.price)
     product.stock = data.get('stock', product.stock)
-
     product.save()
 
+    # Replace all categories if provided
+    if 'categories' in data:
+        names = data['categories']
+        if isinstance(names, str):
+            names = [names]
+
+        product.categories.clear()
+        for name in names:
+            category, _ = Category.objects.get_or_create(name=name)
+            product.categories.add(category)
+
     return JsonResponse({
-        "message": "Product updated"
+        "message": "Product updated",
+        "categories": [c.name for c in product.categories.all()]
     })
 
 
@@ -161,7 +172,7 @@ def seller_products(request):
             "description": product.description,
             "price": str(product.price),
             "stock": product.stock,
-            "category": product.category.name
+            "categories": [c.name for c in product.categories.all()]
         })
 
     return JsonResponse(data, safe=False)
