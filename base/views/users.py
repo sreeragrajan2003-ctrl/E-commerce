@@ -19,13 +19,16 @@ def create_user(request, role):
     if role not in ['buyer', 'seller']:
         return JsonResponse({"error": "Invalid role"}, status=400)
 
+    if User.objects.filter(email=data['email']).exists():
+        return JsonResponse({"error": "Email already registered"}, status=400)
+
     user = User.objects.create(
         email=data['email'],
+        username=data['email'],   # FIX: username must be unique and set
         name=data.get('name', ''),
         phone=data.get('phone', ''),
-        role=role   # role comes from URL
+        role=role
     )
-
     user.set_password(data['password'])
     user.save()
 
@@ -36,7 +39,7 @@ def create_user(request, role):
 
 
 # ======================================================
-# GET ALL USERS (ADMIN ONLY - optional)
+# GET ALL USERS
 # ======================================================
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -95,17 +98,12 @@ def update_user(request, user_id):
     user.name = data.get('name', user.name)
     user.phone = data.get('phone', user.phone)
 
-    # ❌ Do NOT allow role change
-    # user.role = data.get('role', user.role)   ← removed
-
     if 'password' in data:
         user.set_password(data['password'])
 
     user.save()
 
-    return JsonResponse({
-        'message': 'User updated successfully'
-    })
+    return JsonResponse({'message': 'User updated successfully'})
 
 
 # ======================================================
@@ -120,6 +118,4 @@ def delete_user(request, user_id):
 
     request.user.delete()
 
-    return JsonResponse({
-        'message': 'User deleted successfully'
-    })
+    return JsonResponse({'message': 'User deleted successfully'})

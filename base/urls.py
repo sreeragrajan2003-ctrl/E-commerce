@@ -27,39 +27,40 @@ urlpatterns = [
 
     # ================= CATEGORY =================
     path('category/', get_categories),
+    path('category/create/', create_category),          # FIX: 'create/' before '<int:pk>/'
     path('category/<int:pk>/', get_category),
-    path('category/create/', create_category),
     path('category/update/<int:pk>/', update_category),
     path('category/delete/<int:pk>/', delete_category),
 
-   # ================= PRODUCT =================
+    # ================= PRODUCT =================
     path('product/', get_products),
-    path('product/my/', seller_products),   # NEW
+    path('product/my/', seller_products),               # FIX: 'my/' MUST come before '<int:pk>/'
+    path('product/create/', create_product),            # FIX: 'create/' before '<int:pk>/'
     path('product/<int:pk>/', get_product),
-    path('product/create/', create_product),
     path('product/update/<int:pk>/', update_product),
     path('product/delete/<int:pk>/', delete_product),
 
     # ================= ORDERS =================
     path('orders/', get_orders),
+    path('orders/create/', create_order),               # FIX: 'create/' before '<int:pk>/'
     path('orders/<int:pk>/', get_order),
-    path('orders/create/', create_order),
     path('orders/update/<int:pk>/', update_order),
     path('orders/delete/<int:pk>/', delete_order),
 
     # ================= ORDER ITEMS =================
     path('order-items/', get_order_items),
-    path('order-items/<int:pk>/', get_order_item),
     path('order-items/create/', create_order_item),
+    path('order-items/<int:pk>/', get_order_item),
     path('order-items/update/<int:pk>/', update_order_item),
     path('order-items/delete/<int:pk>/', delete_order_item),
 
     # ================= CART =================
-    path('cart/<int:user_id>/', get_cart),
+    # FIX: removed user_id params — views use request.user internally
+    path('cart/', get_cart),
     path('cart/add/', add_to_cart),
     path('cart/update/<int:pk>/', update_cart),
     path('cart/delete/<int:pk>/', delete_cart_item),
-    path('cart/clear/<int:user_id>/', clear_cart),
+    path('cart/clear/', clear_cart),
 
     # ================= PAYMENTS (COD ONLY) =================
     path('payments/', get_payments),
@@ -69,10 +70,8 @@ urlpatterns = [
     # ================= AUTH =================
     path('buyer/register/', buyer_register),
     path('seller/register/', seller_register),
-
     path('buyer/login/', buyer_login),
     path('seller/login/', seller_login),
-
     path('token/refresh/', refresh_token),
 
     # ================= PROTECTED TEST =================

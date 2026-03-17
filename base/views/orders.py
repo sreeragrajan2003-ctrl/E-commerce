@@ -10,6 +10,7 @@ from base.models.payment import Payment
 
 # ===================================================
 # CREATE ORDER (Buyer Only)
+# FIX: removed `amount=0` from Payment.objects.create — field was dropped in migration 0005
 # ===================================================
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -29,17 +30,16 @@ def create_order(request):
             user=request.user
         )
 
-    order = Order.objects.create(
-        buyer=request.user,
-        shipping_address=shipping_address,
-        total_amount=0,
-        status='pending'
-    )
+    order =Payment.objects.create(
+    order=order,
+    method='cod',
+    status='pending'
+)
 
+    # FIX: Payment model no longer has `amount` or `transaction_id` fields
     Payment.objects.create(
         order=order,
         method='cod',
-        amount=0,
         status='pending'
     )
 
@@ -65,6 +65,9 @@ def get_orders(request):
         orders = Order.objects.filter(
             orderitem__product__seller=user
         ).distinct()
+
+    else:
+        return JsonResponse({"error": "Invalid role"}, status=403)
 
     data = []
 
@@ -111,6 +114,8 @@ def get_order(request, pk):
 
 # ===================================================
 # UPDATE ORDER
+# Buyer → update shipping address (only if pending)
+# Seller → update status: pending→shipped, shipped→delivered
 # ===================================================
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
@@ -121,24 +126,27 @@ def update_order(request, pk):
     data = request.data
 
     if order.status == "delivered":
-        return JsonResponse({"error": "Order completed"}, status=400)
+        return JsonResponse({"error": "Order already completed"}, status=400)
 
     if user.role == "buyer" and order.buyer == user:
 
         if 'shipping_address_id' in data:
+
+            if order.status != 'pending':
+                return JsonResponse(
+                    {"error": "Cannot change address after order is shipped"},
+                    status=400
+                )
 
             address = get_object_or_404(
                 Address,
                 id=data['shipping_address_id'],
                 user=user
             )
-
             order.shipping_address = address
             order.save()
 
-            return JsonResponse({
-                "message": "Shipping address updated"
-            })
+            return JsonResponse({"message": "Shipping address updated"})
 
     if user.role == "seller":
 
@@ -147,38 +155,37 @@ def update_order(request, pk):
             product__seller=user
         ).exists()
 
-        if seller_has_product and 'status' in data:
+        if not seller_has_product:
+            return JsonResponse({"error": "Not allowed"}, status=403)
 
+        if 'status' in data:
             new_status = data['status']
 
             if order.status == "pending" and new_status == "shipped":
                 order.status = "shipped"
 
             elif order.status == "shipped" and new_status == "delivered":
-
                 order.status = "delivered"
 
-                payment = Payment.objects.get(order=order)
-                payment.status = "completed"
-                payment.amount = order.total_amount
-                payment.save()
+                # Mark payment as completed when delivered
+                try:
+                    payment = Payment.objects.get(order=order)
+                    payment.status = "completed"
+                    payment.save()
+                except Payment.DoesNotExist:
+                    pass
 
             else:
-                return JsonResponse({
-                    "error": "Invalid status change"
-                }, status=400)
+                return JsonResponse({"error": "Invalid status change"}, status=400)
 
             order.save()
-
-            return JsonResponse({
-                "message": "Order status updated"
-            })
+            return JsonResponse({"message": "Order status updated", "status": order.status})
 
     return JsonResponse({"error": "Not allowed"}, status=403)
 
 
 # ===================================================
-# DELETE ORDER
+# DELETE ORDER (Buyer Only, only if pending)
 # ===================================================
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
@@ -192,8 +199,11 @@ def delete_order(request, pk):
     if order.status == "delivered":
         return JsonResponse({"error": "Cannot delete delivered order"}, status=400)
 
+    # Restore stock for all items before deleting
+    for item in OrderItem.objects.filter(order=order):
+        item.product.stock += item.quantity
+        item.product.save()
+
     order.delete()
 
-    return JsonResponse({
-        "message": "Order deleted"
-    })
+    return JsonResponse({"message": "Order deleted"})
