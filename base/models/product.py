@@ -10,13 +10,17 @@ class Product(models.Model):
     description = models.TextField(blank=True, null=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     stock = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
 
-    # ✅ New — stores uploaded image file
-    # blank=True, null=True means image is optional
-    image = models.ImageField(
-        upload_to='products/',   # files saved to media/products/
-        blank=True,
-        null=True
+    # ❌ Removed single image field
+
+
+# ✅ New separate model — one product can have many images
+class ProductImage(models.Model):
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='images'   # lets us do product.images.all()
     )
-
+    image = models.ImageField(upload_to='products/')
     created_at = models.DateTimeField(auto_now_add=True)
