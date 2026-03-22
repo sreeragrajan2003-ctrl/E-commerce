@@ -30,13 +30,15 @@ def create_order(request):
             user=request.user
         )
 
-    order =Payment.objects.create(
-    order=order,
-    method='cod',
-    status='pending'
-)
+    # ✅ Correctly create the Order first
+    order = Order.objects.create(
+        buyer=request.user,
+        shipping_address=shipping_address,
+        total_amount=0,
+        status='pending'
+    )
 
-    # FIX: Payment model no longer has `amount` or `transaction_id` fields
+    # ✅ Then create Payment linked to that order
     Payment.objects.create(
         order=order,
         method='cod',
@@ -72,14 +74,42 @@ def get_orders(request):
     data = []
 
     for order in orders:
-        data.append({
+
+        order_data = {
             "id": order.id,
             "buyer": order.buyer.id,
-            "shipping_address": order.shipping_address.id if order.shipping_address else None,
             "total_amount": str(order.total_amount),
             "status": order.status,
-            "created_at": order.created_at
-        })
+            "created_at": order.created_at,
+        }
+
+        # ✅ Give seller full buyer + address details
+        if user.role == 'seller':
+            order_data['buyer_info'] = {
+                "name": order.buyer.name,
+                "email": order.buyer.email,
+                "phone": order.buyer.phone or '—',
+            }
+            if order.shipping_address:
+                addr = order.shipping_address
+                order_data['shipping_address'] = {
+                    "full_name": addr.full_name,
+                    "phone": addr.phone,
+                    "address_line": addr.address_line,
+                    "city": addr.city,
+                    "state": addr.state,
+                    "pincode": addr.pincode,
+                    "country": addr.country,
+                }
+            else:
+                order_data['shipping_address'] = None
+        else:
+            # Buyer only needs address id
+            order_data['shipping_address'] = (
+                order.shipping_address.id if order.shipping_address else None
+            )
+
+        data.append(order_data)
 
     return JsonResponse(data, safe=False)
 
@@ -102,14 +132,40 @@ def get_order(request, pk):
                 product__seller=request.user).exists():
             return JsonResponse({"error": "Not allowed"}, status=403)
 
-    return JsonResponse({
+    order_data = {
         "id": order.id,
         "buyer": order.buyer.id,
-        "shipping_address": order.shipping_address.id if order.shipping_address else None,
         "total_amount": str(order.total_amount),
         "status": order.status,
-        "created_at": order.created_at
-    })
+        "created_at": order.created_at,
+    }
+
+    # ✅ Full buyer and address info for seller
+    if request.user.role == 'seller':
+        order_data['buyer_info'] = {
+            "name": order.buyer.name,
+            "email": order.buyer.email,
+            "phone": order.buyer.phone or '—',
+        }
+        if order.shipping_address:
+            addr = order.shipping_address
+            order_data['shipping_address'] = {
+                "full_name": addr.full_name,
+                "phone": addr.phone,
+                "address_line": addr.address_line,
+                "city": addr.city,
+                "state": addr.state,
+                "pincode": addr.pincode,
+                "country": addr.country,
+            }
+        else:
+            order_data['shipping_address'] = None
+    else:
+        order_data['shipping_address'] = (
+            order.shipping_address.id if order.shipping_address else None
+        )
+
+    return JsonResponse(order_data)
 
 
 # ===================================================
